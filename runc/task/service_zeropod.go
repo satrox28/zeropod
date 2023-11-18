@@ -4,34 +4,36 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/ctrox/zeropod/zeropod"
-	"google.golang.org/protobuf/types/known/emptypb"
-
 	"github.com/containerd/cgroups"
-	taskAPI "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/pkg/cri/annotations"
-	"github.com/containerd/containerd/pkg/oom"
-	oomv1 "github.com/containerd/containerd/pkg/oom/v1"
-	oomv2 "github.com/containerd/containerd/pkg/oom/v2"
-	"github.com/containerd/containerd/pkg/shutdown"
-	"github.com/containerd/containerd/runtime/v2/runc"
-	"github.com/containerd/containerd/runtime/v2/shim"
-	"github.com/containerd/containerd/sys/reaper"
+	taskAPI "github.com/containerd/containerd/api/runtime/task/v3"
+	"github.com/containerd/containerd/v2/cmd/containerd-shim-runc-v2/process"
+	"github.com/containerd/containerd/v2/cmd/containerd-shim-runc-v2/runc"
+	"github.com/containerd/containerd/v2/pkg/oom"
+	oomv1 "github.com/containerd/containerd/v2/pkg/oom/v1"
+	oomv2 "github.com/containerd/containerd/v2/pkg/oom/v2"
+	"github.com/containerd/containerd/v2/pkg/shim"
+	"github.com/containerd/containerd/v2/pkg/shutdown"
+	"github.com/containerd/containerd/v2/pkg/sys/reaper"
+	"github.com/containerd/errdefs"
 	runcC "github.com/containerd/go-runc"
 	"github.com/containerd/log"
 	"github.com/containerd/ttrpc"
+	"github.com/ctrox/zeropod/zeropod"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
-	_ = (taskAPI.TaskService)(&wrapper{})
+	_ = shim.TTRPCService(&wrapper{})
 )
 
-func NewZeropodService(ctx context.Context, publisher shim.Publisher, sd shutdown.Service) (taskAPI.TaskService, error) {
+const (
+	containerTypeSandbox = "sandbox"
+)
+
+func NewZeropodService(ctx context.Context, publisher shim.Publisher, sd shutdown.Service) (taskAPI.TTRPCTaskService, error) {
 	var (
 		ep  oom.Watcher
 		err error
@@ -44,6 +46,7 @@ func NewZeropodService(ctx context.Context, publisher shim.Publisher, sd shutdow
 	if err != nil {
 		return nil, err
 	}
+
 	go ep.Run(ctx)
 	s := &service{
 		context:         ctx,
@@ -53,6 +56,7 @@ func NewZeropodService(ctx context.Context, publisher shim.Publisher, sd shutdow
 		shutdown:        sd,
 		containers:      make(map[string]*runc.Container),
 		running:         make(map[int][]containerProcess),
+		pendingExecs:    make(map[*runc.Container]int),
 		exitSubscribers: make(map[*map[int][]runcC.Exit]struct{}),
 	}
 	w := &wrapper{
@@ -71,15 +75,11 @@ func NewZeropodService(ctx context.Context, publisher shim.Publisher, sd shutdow
 		return nil
 	})
 
-	address, err := shim.ReadAddress("address")
-	if err != nil {
-		return nil, err
+	if address, err := shim.ReadAddress("address"); err == nil {
+		sd.RegisterCallback(func(context.Context) error {
+			return shim.RemoveSocket(address)
+		})
 	}
-	sd.RegisterCallback(func(context.Context) error {
-		return shim.RemoveSocket(address)
-	})
-
-	go zeropod.StartMetricsServer(ctx, filepath.Base(address))
 
 	return w, nil
 }
@@ -93,7 +93,7 @@ type wrapper struct {
 }
 
 func (w *wrapper) RegisterTTRPC(server *ttrpc.Server) error {
-	taskAPI.RegisterTaskService(server, w)
+	taskAPI.RegisterTTRPCTaskService(server, w)
 	return nil
 }
 
@@ -126,7 +126,7 @@ func (w *wrapper) Start(ctx context.Context, r *taskAPI.StartRequest) (*taskAPI.
 	// if we have a sandbox container, an exec ID is set or the container does
 	// not match the configured one(s) we should not do anything further with
 	// the container.
-	if cfg.ContainerType == annotations.ContainerTypeSandbox ||
+	if cfg.ContainerType == containerTypeSandbox ||
 		len(r.ExecID) != 0 ||
 		!cfg.IsZeropodContainer() {
 		log.G(ctx).Debugf("ignoring container: %q of type %q", cfg.ContainerName, cfg.ContainerType)
@@ -276,13 +276,28 @@ func (w *wrapper) processExits() {
 		// Handle the exit for a created/started process. If there's more than
 		// one, assume they've all exited. One of them will be the correct
 		// process.
-		delete(w.running, e.Pid)
+		var skipped []containerProcess
+		for _, cp := range w.running[e.Pid] {
+			_, init := cp.Process.(*process.Init)
+			if init && w.pendingExecs[cp.Container] != 0 {
+				// This exit relates to a container for which we have pending execs. In
+				// order to ensure order between execs and the init process for a given
+				// container, skip processing this exit here and let the `handleStarted`
+				// closure for the pending exec publish it.
+				skipped = append(skipped, cp)
+			} else {
+				cps = append(cps, cp)
+			}
+		}
+		if len(skipped) > 0 {
+			w.running[e.Pid] = skipped
+		} else {
+			delete(w.running, e.Pid)
+		}
 		w.lifecycleMu.Unlock()
 
 		for _, cp := range cps {
-			w.mu.Lock()
 			w.handleProcessExit(e, cp.Container, cp.Process)
-			w.mu.Unlock()
 		}
 	}
 }
@@ -325,6 +340,6 @@ func (w *wrapper) postRestore(container *runc.Container, handleStarted zeropod.H
 	w.mu.Unlock()
 
 	if handleStarted != nil {
-		handleStarted(container, p, false)
+		handleStarted(container, p)
 	}
 }

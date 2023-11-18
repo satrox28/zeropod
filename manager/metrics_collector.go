@@ -57,7 +57,7 @@ func fetchMetricsAndMerge(w io.Writer) {
 	}
 	sort.Strings(names)
 
-	enc := expfmt.NewEncoder(w, expfmt.FmtText)
+	enc := expfmt.NewEncoder(w, expfmt.NewFormat(expfmt.TypeTextPlain))
 	for _, n := range names {
 		err := enc.Encode(mfs[n])
 		if err != nil {

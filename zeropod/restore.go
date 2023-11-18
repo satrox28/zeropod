@@ -8,15 +8,14 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/cio"
-	"github.com/containerd/containerd/namespaces"
-	crio "github.com/containerd/containerd/pkg/cri/io"
-	cioutil "github.com/containerd/containerd/pkg/ioutil"
-	"github.com/containerd/containerd/pkg/process"
-	"github.com/containerd/containerd/pkg/stdio"
-	"github.com/containerd/containerd/runtime/v2/runc"
+	task "github.com/containerd/containerd/api/runtime/task/v3"
+	"github.com/containerd/containerd/v2/cmd/containerd-shim-runc-v2/process"
+	"github.com/containerd/containerd/v2/cmd/containerd-shim-runc-v2/runc"
+	cioutil "github.com/containerd/containerd/v2/pkg/ioutil"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
+	"github.com/containerd/containerd/v2/pkg/stdio"
 	"github.com/containerd/log"
+	crio "github.com/ctrox/zeropod/zeropod/io"
 )
 
 func (c *Container) Restore(ctx context.Context) (*runc.Container, process.Process, error) {
@@ -98,33 +97,33 @@ func (c *Container) Restore(ctx context.Context) (*runc.Container, process.Proce
 // been adapted from internal containerd code and the logging setup should be
 // pretty much the same.
 func (c *Container) restoreLoggers(id string, stdio stdio.Stdio) error {
-	fifos := cio.NewFIFOSet(cio.Config{
-		Stdin:    "",
-		Stdout:   stdio.Stdout,
-		Stderr:   stdio.Stderr,
-		Terminal: false,
-	}, func() error { return nil })
+	// fifos := cio.NewFIFOSet(cio.Config{
+	// 	Stdin:    "",
+	// 	Stdout:   stdio.Stdout,
+	// 	Stderr:   stdio.Stderr,
+	// 	Terminal: false,
+	// }, func() error { return nil })
 
-	stdoutWC, stderrWC, err := createContainerLoggers(c.context, c.logPath, false)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err != nil {
-			if stdoutWC != nil {
-				stdoutWC.Close()
-			}
-			if stderrWC != nil {
-				stderrWC.Close()
-			}
-		}
-	}()
-	containerIO, err := crio.NewContainerIO(id, crio.WithFIFOs(fifos))
-	if err != nil {
-		return err
-	}
-	containerIO.AddOutput("log", stdoutWC, stderrWC)
-	containerIO.Pipe()
+	// stdoutWC, stderrWC, err := createContainerLoggers(c.context, c.logPath, false)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer func() {
+	// 	if err != nil {
+	// 		if stdoutWC != nil {
+	// 			stdoutWC.Close()
+	// 		}
+	// 		if stderrWC != nil {
+	// 			stderrWC.Close()
+	// 		}
+	// 	}
+	// }()
+	// containerIO, err := crio.NewContainerIO(id, crio.WithFIFOs(fifos))
+	// if err != nil {
+	// 	return err
+	// }
+	// containerIO.AddOutput("log", stdoutWC, stderrWC)
+	// containerIO.Pipe()
 
 	return nil
 }
