@@ -80,10 +80,11 @@ CFLAGS := -O2 -g -Wall -Werror
 # dependencies installed.
 generate: export BPF_CLANG := $(CLANG)
 generate: export BPF_CFLAGS := $(CFLAGS)
-generate:
+generate: ttrpc
 	docker run --rm -v $(PWD):/app:Z --user $(shell id -u):$(shell id -g) --env=BPF_CLANG="$(CLANG)" --env=BPF_CFLAGS="$(CFLAGS)" $(EBPF_IMAGE)
 
 ttrpc:
+	go mod download
 	cd api/shim/v1; protoc --go_out=. --go_opt=paths=source_relative \
 	--ttrpc_out=. --plugin=protoc-gen-ttrpc=`which protoc-gen-go-ttrpc` \
 	--ttrpc_opt=paths=source_relative *.proto -I. \
