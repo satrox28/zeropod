@@ -4,7 +4,9 @@ on:
   push:
     tags:
       - "*"
-
+    branches:
+      - "*"
+      - "!main"
 env:
   REGISTRY: ghcr.io
   INSTALLER_IMAGE_NAME: ${{ github.repository }}-installer
@@ -34,12 +36,20 @@ jobs:
         id: meta_installer
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
           images: ${{ env.REGISTRY }}/${{ env.INSTALLER_IMAGE_NAME }}
 
       - name: Extract metadata for manager
         id: meta_manager
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
           images: ${{ env.REGISTRY }}/${{ env.MANAGER_IMAGE_NAME }}
 
       - name: Build and push installer
