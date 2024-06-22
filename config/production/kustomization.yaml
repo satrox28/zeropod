@@ -1,5 +1,11 @@
 resources:
   - ../base
+components:
+  # pod-updater is required if status-labels or in-place-scaling is enabled
+  - ../pod-updater
+  - ../status-labels
+  # uncommment to enable in-place-scaling
+  # - ../in-place-scaling
 images:
   - name: manager
     newName: ghcr.io/ctrox/zeropod-manager
@@ -14,6 +20,3 @@ patches:
         value: -criu-image=ghcr.io/ctrox/zeropod-criu:v3.19
     target:
       kind: DaemonSet
-# uncommment to enable in-place scaling
-# components:
-#  - ../in-place-scaling
