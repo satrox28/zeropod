@@ -74,8 +74,8 @@ func NewRegistry() *prometheus.Registry {
 func (c *Container) labels() map[string]string {
 	return map[string]string{
 		labelContainerName: c.cfg.ContainerName,
-		LabelPodName:       c.cfg.PodName,
-		LabelPodNamespace:  c.cfg.PodNamespace,
+		LabelPodName:       c.cfg.PodName(),
+		LabelPodNamespace:  c.cfg.PodNamespace(),
 	}
 }
 

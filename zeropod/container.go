@@ -64,7 +64,7 @@ func New(ctx context.Context, cfg *Config, cr *sync.Mutex, container *runc.Conta
 		return nil, err
 	}
 
-	logPath, err := getLogPath(ctx, cfg)
+	logPath, err := getLogPath(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get log path: %w", err)
 	}
@@ -174,8 +174,8 @@ func (c *Container) Status() *v1.ContainerStatus {
 	return &v1.ContainerStatus{
 		Id:           c.ID(),
 		Name:         c.cfg.ContainerName,
-		PodName:      c.cfg.PodName,
-		PodNamespace: c.cfg.PodNamespace,
+		PodName:      c.cfg.PodName(),
+		PodNamespace: c.cfg.PodNamespace(),
 		Phase:        phase,
 	}
 }

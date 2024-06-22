@@ -72,7 +72,9 @@ network-lock skip
     "zeropod.ctrox.dev/scaledown-duration",
     "zeropod.ctrox.dev/disable-checkpointing",
     "zeropod.ctrox.dev/pre-dump",
-    "io.containerd.runc.v2.group"
+    "io.containerd.runc.v2.group",
+    "vcluster.loft.sh/name",
+    "vcluster.loft.sh/namespace"
   ]
 `
 )

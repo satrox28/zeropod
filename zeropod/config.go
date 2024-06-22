@@ -23,6 +23,8 @@ const (
 	PreDumpAnnotationKey             = "zeropod.ctrox.dev/pre-dump"
 	CRIContainerNameAnnotation       = "io.kubernetes.cri.container-name"
 	CRIContainerTypeAnnotation       = "io.kubernetes.cri.container-type"
+	VClusterNameAnnotationKey        = "vcluster.loft.sh/name"
+	VClusterNamespaceAnnotationKey   = "vcluster.loft.sh/namespace"
 
 	defaultScaleDownDuration = time.Minute
 	containersDelim          = ","
@@ -43,6 +45,8 @@ type annotationConfig struct {
 	PodName               string `mapstructure:"io.kubernetes.cri.sandbox-name"`
 	PodNamespace          string `mapstructure:"io.kubernetes.cri.sandbox-namespace"`
 	PodUID                string `mapstructure:"io.kubernetes.cri.sandbox-uid"`
+	VClusterPodName       string `mapstructure:"vcluster.loft.sh/name"`
+	VClusterPodNamespace  string `mapstructure:"vcluster.loft.sh/namespace"`
 }
 
 type Config struct {
@@ -53,11 +57,13 @@ type Config struct {
 	PreDump               bool
 	ContainerName         string
 	ContainerType         string
-	PodName               string
-	PodNamespace          string
-	PodUID                string
+	podName               string
+	podNamespace          string
+	podUID                string
 	ContainerdNamespace   string
 	spec                  *specs.Spec
+	vclusterPodName       string
+	vclusterPodNamespace  string
 }
 
 // NewConfig uses the annotations from the container spec to create a new
@@ -141,11 +147,13 @@ func NewConfig(ctx context.Context, spec *specs.Spec) (*Config, error) {
 		ZeropodContainerNames: containerNames,
 		ContainerName:         cfg.ContainerName,
 		ContainerType:         cfg.ContainerType,
-		PodName:               cfg.PodName,
-		PodNamespace:          cfg.PodNamespace,
-		PodUID:                cfg.PodUID,
 		ContainerdNamespace:   ns,
+		podName:               cfg.PodName,
+		podNamespace:          cfg.PodNamespace,
+		podUID:                cfg.PodUID,
 		spec:                  spec,
+		vclusterPodName:       cfg.VClusterPodName,
+		vclusterPodNamespace:  cfg.VClusterPodNamespace,
 	}, nil
 }
 
@@ -158,4 +166,30 @@ func (cfg Config) IsZeropodContainer() bool {
 
 	// if there is none specified, every one of them is considered.
 	return len(cfg.ZeropodContainerNames) == 0
+}
+
+func (cfg Config) HostPodName() string {
+	return cfg.podName
+}
+
+func (cfg Config) HostPodNamespace() string {
+	return cfg.podNamespace
+}
+
+func (cfg Config) HostPodUID() string {
+	return cfg.podUID
+}
+
+func (cfg Config) PodName() string {
+	if cfg.vclusterPodName != "" {
+		return cfg.vclusterPodName
+	}
+	return cfg.podName
+}
+
+func (cfg Config) PodNamespace() string {
+	if cfg.vclusterPodNamespace != "" {
+		return cfg.vclusterPodNamespace
+	}
+	return cfg.podNamespace
 }
